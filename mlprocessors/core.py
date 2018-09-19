@@ -6,6 +6,9 @@ import argparse
 import sys
 import traceback
 
+class ParserError(ValueError):
+    pass
+
 class InOutBase():
     def __init__(self, description = None, optional = False, multi = False, validators = None, *args, **kwargs):
         self.description = description
@@ -227,7 +230,7 @@ class Processor(metaclass=ProcMeta):
     USE_ARGUMENTS = True
 
     @classmethod
-    def _init(cls, self, *args, **kwargs):
+    def apply(cls, self, *args, **kwargs):
         for key in kwargs:
           #print(key)
           if key in [ x.name for x in cls.INPUTS ]:
@@ -239,10 +242,24 @@ class Processor(metaclass=ProcMeta):
 
 
     def __init__(self, *args, **kwargs):
-        self._init(self, *args, **kwargs)
+        self.apply(self, *args, **kwargs)
 
     def __call__(self, *args, **kwargs):
-        self.run(*args, **kwargs)
+        # in order to validate arguments we need to pass them through
+        # self.invoke() that requires them to be a list of strings
+
+        arglist = []
+        for key, value in kwargs.items():
+            arglist.append('--'+key)
+            if isinstance(value, list):
+                serialized = ','.join([str(x) for x in value])
+            else:
+                serialized = str(value)
+            arglist.append(serialized)
+        try:
+            self.invoke(arglist, self)
+        except ParserError as exc:
+            raise RuntimeError('Provided arguments are not valid for this processor') from exc
 
     @classmethod
     @lru_cache()
@@ -268,14 +285,23 @@ class Processor(metaclass=ProcMeta):
         return pspec
 
     @classmethod
-    def invoke_parser(self, supparser=None):
+    def invoke_parser(self, supparser=None, noexit=False):
         """
             Creates a commandline parser for the processo
         """
         if supparser:
             parser = supparser.add_parser(self.NAME, description=self.DESCRIPTION)
         else:
-            parser = argparse.ArgumentParser(prog=self.NAME, description=self.DESCRIPTION)
+            if noexit:
+                class NoExitArgumentParser(argparse.ArgumentParser):
+                    def exit(self, status=0, message=None):
+                        raise ParserError()
+                    def error(self, message):
+                        raise ParserError()
+
+                parser = NoExitArgumentParser(prog=self.NAME, description=self.DESCRIPTION)
+            else:
+                parser = argparse.ArgumentParser(prog=self.NAME, description=self.DESCRIPTION)
 
 
         def populate_parser(parser, dataset):
@@ -316,11 +342,11 @@ class Processor(metaclass=ProcMeta):
         return parser
 
     @classmethod
-    def invoke(proc, args):
+    def invoke(proc, args, instance = None):
         """
             Executes the processor passing given arguments
         """
-        parser = proc.invoke_parser()
+        parser = proc.invoke_parser(noexit=(instance is not None))
         opts = parser.parse_args(args)
         kwargs = {}
 
@@ -330,6 +356,7 @@ class Processor(metaclass=ProcMeta):
                 elemname = elem.name
                 # ml-run-process passes values for not provided inputs, outputs and params as empty strings ('')
                 if hasattr(opts, elemname) and getattr(opts, elemname) not in [None, '']:
+                    # value for element was given in the invocation
                     elemvalue = getattr(opts, elemname)
                     if canMulti and isinstance(elemvalue, list):
                         elemlist = elemvalue
@@ -341,8 +368,10 @@ class Processor(metaclass=ProcMeta):
                         prepared = elem.prepare(elemvalue) or elemvalue
                         kwargs[elem.name] = prepared
                 elif elem.optional:
+                    # value was not set but is optional so ignore it
                     kwargs[elem.name] = None
                 else:
+                    # value was not set and is mandatory -- error
                     raise AttributeError('Missing value for {} '.format(elemname))
 
         try:
@@ -369,8 +398,11 @@ class Processor(metaclass=ProcMeta):
                     kwargs[param.name] = param.default
                 else:
                     raise AttributeError('Missing value for {} parameter'.format(param.name))
-            inst = proc(**kwargs)
-            return inst.run()
+            if not instance:
+                instance = proc(**kwargs)
+            else:
+                instance.apply(instance, **kwargs)
+            return instance.run()
             # todo: cleanup
         except Exception as e:
             print("Error:", e)

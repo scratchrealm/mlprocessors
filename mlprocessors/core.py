@@ -223,14 +223,45 @@ class ProcMeta(type):
 
 
 class Processor(metaclass=ProcMeta):
+    """
+    Create a MountainLab processor.
+
+    Main use of Processor is to serve as a base class for processors.
+    A processor is described in a declarative manner, that is the usual
+    approach is to derive a new class from it and declare entities such
+    as processor inputs, outputs and parameters as class members.
+
+    In most cases you will want to register the processor in a Registry and
+    the registry will handle instantiating and running the processor as
+    defined by command-line arguments. However it is also possible to
+    instantiate the processor object manually and execute it like a function,
+    configuring it with keyword arguments.
+
+    """
     NAMESPACE=None
     VERSION = None
+    """ Version of the processor """
     DESCRIPTION = None
+    """ Textual description of the processor """
     COMMAND = None
+    """
+    Command to invoke the processor from the commandline.
+    Usually this is determined automatically and should not be set manually.
+    """
     USE_ARGUMENTS = True
 
     @classmethod
     def apply(cls, self, *args, **kwargs):
+        """
+        Applies kwargs arguments to the instance passed as the first
+        argument to the call.
+
+        For defined INPUTS, OUTPUTS and PARAMETERS the method extracts
+        a corresponding value from kwargs and sets it as an instance attribute.
+        For example, if the processor has a 'foo' parameter declared and
+        'foo = something' is passed to apply(), self.foo will become
+        'something'.
+        """
         for key in kwargs:
           #print(key)
           if key in [ x.name for x in cls.INPUTS ]:
@@ -242,6 +273,9 @@ class Processor(metaclass=ProcMeta):
 
 
     def __init__(self, *args, **kwargs):
+        """
+        Initialize the instance using values from kwargs.
+        """
         self.apply(self, *args, **kwargs)
 
     def __call__(self, *args, **kwargs):
@@ -265,7 +299,12 @@ class Processor(metaclass=ProcMeta):
     @lru_cache()
     def spec(self):
         """
-            Generates spec for the processor as a Python dictionary.
+        Generate spec for the processor as a Python dictionary.
+
+        A spec is a standard way to describe a MountainLab processor in a way
+        that is easy to process, yet still understandable by humans.
+        This method generates a Python dictionary that complies with a spec
+        definition.
         """
         pspec = {}
         pspec['name'] = self.NAME
@@ -287,7 +326,7 @@ class Processor(metaclass=ProcMeta):
     @classmethod
     def invoke_parser(self, supparser=None, noexit=False):
         """
-            Creates a commandline parser for the processo
+            Return a commandline parser (argparse) for the processor.
         """
         if supparser:
             parser = supparser.add_parser(self.NAME, description=self.DESCRIPTION)
@@ -344,7 +383,9 @@ class Processor(metaclass=ProcMeta):
     @classmethod
     def invoke(proc, args, instance = None):
         """
-            Executes the processor passing given arguments
+        Executes the processor passing given arguments.
+
+        :param args: a list of parameters in --key=value format.
         """
         parser = proc.invoke_parser(noexit=(instance is not None))
         opts = parser.parse_args(args)

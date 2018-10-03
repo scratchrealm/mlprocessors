@@ -1,9 +1,15 @@
 import os
 
 class ValidationError(ValueError):
+    """
+    Validation failed exception
+    """
     pass
 
 class Validator:
+    """
+    Base class for validators
+    """
     def __init__(self, *args, **kwargs):
         pass
 
@@ -11,9 +17,17 @@ class Validator:
         return self.validate(value)
 
     def validate(self, value):
+        """
+        Validation function. Accepts the value to be validated.
+        """
         return True
 
 class ValueValidator(Validator):
+    """
+    Validation of numeric values. Allows to specify range of accepted values
+    by passing in 'min' and/or 'max' keyword arguments when constructing
+    the validator.
+    """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if 'min' in kwargs: self.min = kwargs['min']
@@ -24,7 +38,13 @@ class ValueValidator(Validator):
         if self.max and value > self.max: raise ValidationError("Value {} greater than {}".format(value, self.max))
 
 class RegexValidator(Validator):
+    """
+    Validation against a given regular expression.
+    """
     def __init__(self, regex, *args, **kwargs):
+        """
+        :param regex: Regular expression to match against.
+        """
         super().__init__(*args, **kwargs)
         self.regex = regex
 

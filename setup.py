@@ -4,7 +4,7 @@ pkg_name="mlprocessors"
 
 setuptools.setup(
     name=pkg_name,
-    version="0.1",
+    version="0.1.1",
     author="Witold Wysota",
     author_email="wysota@wysota.org",
     description="A Python framework for making MountainLab processor packages",
@@ -15,6 +15,7 @@ setuptools.setup(
     },
     install_requires=[
         'argparse',
+        'pairio'
     ],
     classifiers=(
         "Programming Language :: Python :: 3",
@@ -24,7 +25,7 @@ setuptools.setup(
     conda={
         "build_number":0,
         "build_script":[
-            "python -m pip install --no-deps --ignore-installed .",
+            "python -m pip install .",
             "echo $CMD",
             "$CMD"
         ],

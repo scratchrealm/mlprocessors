@@ -5,7 +5,9 @@ import json
 import os
 import traceback
 import argparse
-
+from .execute import execute
+import types
+import pairio
 
 class ProcessorRegistry:
     def __init__(self, processors = [], namespace = None):
@@ -110,9 +112,13 @@ class ProcessorRegistry:
 
 def register_processor(registry):
     def decor(cls):
+      cls=mlprocessor(cls)
       registry.register(cls)
       return cls
     return decor
 
+def mlprocessor(cls):
+    cls.execute=types.MethodType(execute,cls)
+    return cls
 
 registry = ProcessorRegistry()

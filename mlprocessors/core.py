@@ -5,6 +5,7 @@ from functools import lru_cache
 import argparse
 import sys
 import traceback
+from .execute import execute
 
 class ParserError(ValueError):
     pass
@@ -263,7 +264,6 @@ class Processor(metaclass=ProcMeta):
         'something'.
         """
         for key in kwargs:
-          #print(key)
           if key in [ x.name for x in cls.INPUTS ]:
             setattr(self, key, kwargs[key])
           if key in [ x.name for x in cls.OUTPUTS ]:
@@ -291,7 +291,7 @@ class Processor(metaclass=ProcMeta):
                 serialized = str(value)
             arglist.append(serialized)
         try:
-            self.invoke(arglist, _instance=self)
+            self.invoke(args=arglist, _instance=self)
         except ParserError as exc:
             raise RuntimeError('Provided arguments are not valid for this processor') from exc
 
@@ -381,12 +381,14 @@ class Processor(metaclass=ProcMeta):
         return parser
 
     @classmethod
-    def invoke(proc, args=[], *, _instance = None, **kwargs):
+    def invoke(proc, args=None, *, _instance = None, **kwargs):
         """
         Executes the processor passing given arguments.
 
         :param args: a list of parameters in --key=value format.
         """
+        if args is None:
+            args=[]
         for kwargname in kwargs:
             args.append('--'+kwargname)
             args.append('{}'.format(kwargs[kwargname]))
@@ -452,5 +454,12 @@ class Processor(metaclass=ProcMeta):
             print("Error:", e)
 #            traceback.print_exc()
             raise
+
+    @classmethod
+    def execute(proc,**kwargs):
+        #if not _cache:
+        #    proc.invoke(**kwargs)
+        #    return
+        return execute(proc,**kwargs)
 
 

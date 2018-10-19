@@ -5,51 +5,20 @@ import json
 import os
 import shutil
 import tempfile
+from pairio import client as pairio
+from kbucket import client as kbucket
+
 def sha1(str):
     hash_object = hashlib.sha1(str.encode('utf-8'))
     return hash_object.hexdigest()
-    
-def do_compute_sha1_of_file(fname):
-    BLOCKSIZE = 65536
-    hasher = hashlib.sha1()
-    with open(fname, 'rb') as f:
-        buf = f.read(BLOCKSIZE)
-        while len(buf) > 0:
-            hasher.update(buf)
-            buf = f.read(BLOCKSIZE)
-    return hasher.hexdigest()
-
-def compute_sha1_of_file(fname,use_cache=True):
-    if not os.path.exists(fname):
-        return None
-    if not use_cache:
-        return do_compute_sha1_of_file(fname)
-    stat0=os.stat(fname)
-    obj=dict(
-        operation='sha1',
-        path=fname,
-        size=stat0.st_size,
-        ino=stat0.st_ino,
-        mtime=stat0.st_mtime,
-        ctime=stat0.st_ctime
-    )
-    signature_string=json.dumps(obj, sort_keys=True)
-    val=pairio.getLocal(signature_string)
-    if (val is not None) and (type(val)==str):
-        return val
-    else:
-        val=compute_sha1_of_file(fname,use_cache=False)
-        pairio.setLocal(signature_string,val)
-        pairio.setLocal(val,fname)
-        return val
-    
+        
 def compute_job_input_signature(val,input_name):
     if type(val)==str:
         if val.startswith('sha1://'):
             list=str.split(val,'/')
             return list[2]
         elif os.path.exists(val):
-            return compute_sha1_of_file(val)
+            return kbucket.computeFileSha1(val) ## todo: kbucket.computeFileSha1 should include sha1:// and kbucket:// paths
         else:
             raise Exception('Input file does not exist: {}'.format(input_name))
     else:
@@ -136,20 +105,20 @@ class ProcessorExecuteOutput():
     def __init__(self):
         self.outputs=dict()
 
-def execute(self, _cache=True, **kwargs):
-    X=self()
+def execute(proc, _cache=True, _force_run=False, **kwargs):
+    X=proc() # instance
     ret=ProcessorExecuteOutput()
-    for input0 in self.INPUTS:
+    for input0 in proc.INPUTS:
         name0=input0.name
         if not name0 in kwargs:
             raise Exception('Missing input: {}'.format(name0))
         setattr(X,name0,kwargs[name0])
-    for output0 in self.OUTPUTS:
+    for output0 in proc.OUTPUTS:
         name0=output0.name
         if not name0 in kwargs:
             raise Exception('Missing output: {}'.format(name0))
         setattr(X,name0,kwargs[name0])
-    for param0 in self.PARAMETERS:
+    for param0 in proc.PARAMETERS:
         name0=param0.name
         if not name0 in kwargs:
             raise Exception('Missing parameter: {}'.format(name0))
@@ -158,12 +127,15 @@ def execute(self, _cache=True, **kwargs):
         outputs_all_in_pairio=True
         output_signatures=dict()
         output_sha1s=dict()
-        for output0 in self.OUTPUTS:
+        cache_collections=set()
+        for output0 in proc.OUTPUTS:
             name0=output0.name
             signature0=compute_processor_job_output_signature(X,name0)
             output_signatures[name0]=signature0
-            output_sha1=pairio.getLocal(signature0)
+            output_sha1,output_collection=pairio.get(signature0,return_collection=True)
             if output_sha1 is not None:
+                print('Found output "{}" in cache collection: {}'.format(name0,output_collection))
+                cache_collections.add(output_collection)
                 output_sha1s[name0]=output_sha1
             else:
                 outputs_all_in_pairio=False
@@ -171,38 +143,38 @@ def execute(self, _cache=True, **kwargs):
         output_files=dict()
         if outputs_all_in_pairio:
             output_files_all_found=True
-            for output0 in self.OUTPUTS:
+            for output0 in proc.OUTPUTS:
                 name0=output0.name
                 sha1=output_sha1s[name0]
-                hint_fname=pairio.getLocal(sha1)
-                if not hint_fname:
-                    hint_fname=getattr(X,name0)
-                sha1b=compute_sha1_of_file(hint_fname)
-                if sha1==sha1b:
-                    output_files[name0]=hint_fname
+                fname=kbucket.findFile(sha1=sha1)
+                if fname:
+                    output_files[name0]=fname
                 else:
                     output_files_all_found=False
         if outputs_all_in_pairio and (not output_files_all_found):
             print('Found job in cache, but not all output files exist.')
 
         if output_files_all_found:
-            print('Using outputs from cache.')
-            for output0 in self.OUTPUTS:
-                name0=output0.name
-                fname1=output_files[name0]
-                fname2=getattr(X,name0)
-                if type(fname2)==str:
-                    if fname1!=fname2:
-                        if os.path.exists(fname2):
-                            os.remove(fname2)
-                        shutil.copyfile(fname1,fname2)
-                    ret.outputs[name0]=fname2
-                else:
-                    ret.outputs[name0]=fname1
-            return ret
+            if not _force_run:
+                print('Using outputs from cache:',','.join(list(cache_collections)))
+                for output0 in proc.OUTPUTS:
+                    name0=output0.name
+                    fname1=output_files[name0]
+                    fname2=getattr(X,name0)
+                    if type(fname2)==str:
+                        if fname1!=fname2:
+                            if os.path.exists(fname2):
+                                os.remove(fname2)
+                            shutil.copyfile(fname1,fname2)
+                        ret.outputs[name0]=fname2
+                    else:
+                        ret.outputs[name0]=fname1
+                return ret
+            else:
+                print('Found outputs in cache, but forcing run...')
         
     temporary_output_files=set()
-    for output0 in self.OUTPUTS:
+    for output0 in proc.OUTPUTS:
         name0=output0.name
         val0=getattr(X,name0)
         job_signature0=compute_processor_job_output_signature(X,None)
@@ -219,18 +191,16 @@ def execute(self, _cache=True, **kwargs):
             if os.path.exists(fname):
                 os.remove(fname)
         raise
-    for output0 in self.OUTPUTS:
+    for output0 in proc.OUTPUTS:
         name0=output0.name
         output_fname=getattr(X,name0)
         if output_fname in temporary_output_files:
-            output_fname=_move_file_to_sha1_cache(output_fname)
+            output_fname=kbucket.moveFileToCache(output_fname)
         ret.outputs[name0]=output_fname
         if _cache:
-            output_sha1=compute_sha1_of_file(output_fname)
+            output_sha1=kbucket.computeFileSha1(output_fname)
             signature0=output_signatures[name0]
-            pairio.setLocal(signature0,output_sha1)
+            print('setting: '+signature0+':'+output_sha1)
+            pairio.set(signature0,output_sha1)
     return ret
 
-def _move_file_to_sha1_cache(fname):
-    sha1_hash=compute_sha1_of_file(fname)
-    ## TODO: finish this

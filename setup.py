@@ -4,7 +4,7 @@ pkg_name="mlprocessors"
 
 setuptools.setup(
     name=pkg_name,
-    version="0.2.0",
+    version="0.2.1",
     author="Witold Wysota",
     author_email="wysota@wysota.org",
     description="A Python framework for making MountainLab processor packages",
@@ -15,7 +15,8 @@ setuptools.setup(
     },
     install_requires=[
         'argparse',
-        'pairio'
+        'pairio',
+        'kbucket'
     ],
     classifiers=(
         "Programming Language :: Python :: 3",

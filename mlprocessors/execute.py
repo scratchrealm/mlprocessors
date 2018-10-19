@@ -8,6 +8,7 @@ import tempfile
 def sha1(str):
     hash_object = hashlib.sha1(str.encode('utf-8'))
     return hash_object.hexdigest()
+    
 def do_compute_sha1_of_file(fname):
     BLOCKSIZE = 65536
     hasher = hashlib.sha1()
@@ -183,7 +184,7 @@ def execute(self, _cache=True, **kwargs):
                     output_files_all_found=False
         if outputs_all_in_pairio and (not output_files_all_found):
             print('Found job in cache, but not all output files exist.')
-            
+
         if output_files_all_found:
             print('Using outputs from cache.')
             for output0 in self.OUTPUTS:
@@ -200,6 +201,7 @@ def execute(self, _cache=True, **kwargs):
                     ret.outputs[name0]=fname1
             return ret
         
+    temporary_output_files=set()
     for output0 in self.OUTPUTS:
         name0=output0.name
         val0=getattr(X,name0)
@@ -207,13 +209,28 @@ def execute(self, _cache=True, **kwargs):
         if type(val0)!=str:
             fname0=job_signature0+'_'+name0+val0['ext']
             tmp_fname=create_temporary_file(fname0)
+            temporary_output_files.add(tmp_fname)
             setattr(X,name0,tmp_fname)
-    X.run()
+    try:
+        X.run()
+    except:
+        # clean up temporary output files
+        for fname in temporary_output_files:
+            if os.path.exists(fname):
+                os.remove(fname)
+        raise
     for output0 in self.OUTPUTS:
         name0=output0.name
-        ret.outputs[name0]=getattr(X,name0)
+        output_fname=getattr(X,name0)
+        if output_fname in temporary_output_files:
+            output_fname=_move_file_to_sha1_cache(output_fname)
+        ret.outputs[name0]=output_fname
         if _cache:
+            output_sha1=compute_sha1_of_file(output_fname)
             signature0=output_signatures[name0]
-            output_sha1=compute_sha1_of_file(getattr(X,name0))
             pairio.setLocal(signature0,output_sha1)
     return ret
+
+def _move_file_to_sha1_cache(fname):
+    sha1_hash=compute_sha1_of_file(fname)
+    ## TODO: finish this

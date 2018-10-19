@@ -291,7 +291,7 @@ class Processor(metaclass=ProcMeta):
                 serialized = str(value)
             arglist.append(serialized)
         try:
-            self.invoke(arglist, self)
+            self.invoke(arglist, _instance=self)
         except ParserError as exc:
             raise RuntimeError('Provided arguments are not valid for this processor') from exc
 
@@ -381,18 +381,21 @@ class Processor(metaclass=ProcMeta):
         return parser
 
     @classmethod
-    def invoke(proc, args, instance = None):
+    def invoke(proc, args=[], *, _instance = None, **kwargs):
         """
         Executes the processor passing given arguments.
 
         :param args: a list of parameters in --key=value format.
         """
-        parser = proc.invoke_parser(noexit=(instance is not None))
+        for kwargname in kwargs:
+            args.append('--'+kwargname)
+            args.append('{}'.format(kwargs[kwargname]))
+        parser = proc.invoke_parser(noexit=(_instance is not None))
         opts = parser.parse_args(args)
-        kwargs = {}
+        kwargs0 = {}
 
 
-        def handle_set(opts, dataset, kwargs, canMulti = False):
+        def handle_set(opts, dataset, kwargs0, canMulti = False):
             for elem in dataset:
                 elemname = elem.name
                 # ml-run-process passes values for not provided inputs, outputs and params as empty strings ('')
@@ -407,17 +410,17 @@ class Processor(metaclass=ProcMeta):
                         for validator in elem.validators: validator(elemelem)
                     if hasattr(opts, elem.name):
                         prepared = elem.prepare(elemvalue) or elemvalue
-                        kwargs[elem.name] = prepared
+                        kwargs0[elem.name] = prepared
                 elif elem.optional:
                     # value was not set but is optional so ignore it
-                    kwargs[elem.name] = None
+                    kwargs0[elem.name] = None
                 else:
                     # value was not set and is mandatory -- error
                     raise AttributeError('Missing value for {} '.format(elemname))
 
         try:
-            handle_set(opts, proc.INPUTS, kwargs, True)
-            handle_set(opts, proc.OUTPUTS, kwargs, True)
+            handle_set(opts, proc.INPUTS, kwargs0, True)
+            handle_set(opts, proc.OUTPUTS, kwargs0, True)
 
             for param in proc.PARAMETERS:
                 if hasattr(opts, param.name) and getattr(opts, param.name) is not None and getattr(opts, param.name) is not '':
@@ -431,21 +434,23 @@ class Processor(metaclass=ProcMeta):
                     if param.choices and isinstance(param.choices, tuple):
                         for choice in param.choices:
                             if choice[0] == value:
-                                kwargs[param.name] = choice[1]
+                                kwargs0[param.name] = choice[1]
                                 break
                     else:
-                        kwargs[param.name] = value
+                        kwargs0[param.name] = value
                 elif param.optional:
-                    kwargs[param.name] = param.default
+                    kwargs0[param.name] = param.default
                 else:
                     raise AttributeError('Missing value for {} parameter'.format(param.name))
-            if not instance:
-                instance = proc(**kwargs)
+            if not _instance:
+                _instance = proc(**kwargs0)
             else:
-                instance.apply(instance, **kwargs)
-            return instance.run()
+                _instance.apply(_instance, **kwargs0)
+            return _instance.run()
             # todo: cleanup
         except Exception as e:
             print("Error:", e)
 #            traceback.print_exc()
             raise
+
+

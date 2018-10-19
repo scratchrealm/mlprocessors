@@ -200,7 +200,6 @@ def execute(proc, _cache=True, _force_run=False, **kwargs):
         if _cache:
             output_sha1=kbucket.computeFileSha1(output_fname)
             signature0=output_signatures[name0]
-            print('setting: '+signature0+':'+output_sha1)
             pairio.set(signature0,output_sha1)
     return ret
 

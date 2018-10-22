@@ -106,8 +106,9 @@ class ProcessorExecuteOutput():
         self.outputs=dict()
 
 def execute(proc, _cache=True, _force_run=False, **kwargs):
+    # Execute a processor
     X=proc() # instance
-    ret=ProcessorExecuteOutput()
+    ret=ProcessorExecuteOutput() # We will return this object
     for input0 in proc.INPUTS:
         name0=input0.name
         if not name0 in kwargs:
@@ -144,13 +145,16 @@ def execute(proc, _cache=True, _force_run=False, **kwargs):
         if outputs_all_in_pairio:
             output_files_all_found=True
             for output0 in proc.OUTPUTS:
-                name0=output0.name
-                sha1=output_sha1s[name0]
-                fname=kbucket.findFile(sha1=sha1)
-                if fname:
-                    output_files[name0]=fname
-                else:
-                    output_files_all_found=False
+                out0=getattr(X,name0)
+                if out0:
+                    name0=output0.name
+                    ext0=_get_output_ext(out0)
+                    sha1=output_sha1s[name0]
+                    fname=kbucket.findFile(sha1=sha1)
+                    if fname:
+                        output_files[name0]='sha1://'+sha1+'/'+name0+ext0
+                    else:
+                        output_files_all_found=False
         if outputs_all_in_pairio and (not output_files_all_found):
             print('Found job in cache, but not all output files exist.')
 
@@ -162,6 +166,7 @@ def execute(proc, _cache=True, _force_run=False, **kwargs):
                     fname1=output_files[name0]
                     fname2=getattr(X,name0)
                     if type(fname2)==str:
+                        fname1=kbucket.realizeFile(fname1)
                         if fname1!=fname2:
                             if os.path.exists(fname2):
                                 os.remove(fname2)
@@ -203,3 +208,11 @@ def execute(proc, _cache=True, _force_run=False, **kwargs):
             pairio.set(signature0,output_sha1)
     return ret
 
+def _get_output_ext(out0):
+    if type(out0)==str:
+        filename, ext = os.path.splitext(out0)
+        return ext
+    elif type(out0)==dict:
+        if 'ext' in out0:
+            return out0['ext']
+    return ''

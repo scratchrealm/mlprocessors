@@ -122,8 +122,13 @@ def execute(proc, _cache=True, _force_run=False, **kwargs):
     for param0 in proc.PARAMETERS:
         name0=param0.name
         if not name0 in kwargs:
-            raise Exception('Missing parameter: {}'.format(name0))
-        setattr(X,name0,kwargs[name0])
+            if param0.optional:
+                val0=param0.default
+            else:
+                raise Exception('Missing required parameter: {}'.format(name0))
+        else:
+            val0=kwargs[name0]
+        setattr(X,name0,val0)
     if _cache:
         outputs_all_in_pairio=True
         output_signatures=dict()
@@ -177,6 +182,15 @@ def execute(proc, _cache=True, _force_run=False, **kwargs):
                 return ret
             else:
                 print('Found outputs in cache, but forcing run...')
+
+    for input0 in proc.INPUTS:
+        name0=input0.name
+        if hasattr(X,name0):
+            val0=getattr(X,name0)
+            val1=kbucket.realizeFile(val0)
+            if not val1:
+                raise Exception('Unable to realize input file {}: {}'.format(name0,val0))
+            setattr(X,name0,val1)
         
     temporary_output_files=set()
     for output0 in proc.OUTPUTS:

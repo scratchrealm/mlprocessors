@@ -11,9 +11,10 @@ class ParserError(ValueError):
     pass
 
 class InOutBase():
-    def __init__(self, description = None, optional = False, multi = False, validators = None, *args, **kwargs):
+    def __init__(self, description = None, optional = False, multi = False, directory=False, validators = None, *args, **kwargs):
         self.description = description
         self.optional = optional
+        self.directory = directory
         self.multi = multi
         self.validators = validators or []
 
@@ -26,14 +27,15 @@ class InOutBase():
 
 
 class Input(InOutBase):
-    def __init__(self, description = None, optional = False, multi = False, validators = None, *args, **kwargs):
-        super().__init__(description, optional, multi, validators, *args, **kwargs)
+    def __init__(self, description = None, optional = False, multi = False, directory=False, validators = None, *args, **kwargs):
+        super().__init__(description, optional, multi, directory, validators, *args, **kwargs)
         self.validators.append(FileExistsValidator())
         # self.formats = []
 
 class Output(InOutBase):
     def __init__(self, description = None, optional = False, multi = False, validators = None, *args, **kwargs):
-        super().__init__(description, optional, multi, validators, *args, **kwargs)
+        directory=False
+        super().__init__(description, optional, multi, directory, validators, *args, **kwargs)
 
 
 class StreamInput(Input):

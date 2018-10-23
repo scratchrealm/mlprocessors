@@ -12,15 +12,44 @@ def sha1(str):
     hash_object = hashlib.sha1(str.encode('utf-8'))
     return hash_object.hexdigest()
         
-def compute_job_input_signature(val,input_name):
+def compute_job_input_signature(val,input_name,*,directory):
     if type(val)==str:
         if val.startswith('sha1://'):
+            if directory:
+                raise Exception('sha1:// path not allowed for directory input')
             list=str.split(val,'/')
             return list[2]
-        elif os.path.exists(val):
-            return kbucket.computeFileSha1(val) ## todo: kbucket.computeFileSha1 should include sha1:// and kbucket:// paths
+        elif val.startswith('kbucket://'):
+            if directory:
+                hash0=kbucket.computeDirHash(val)
+                if not hash0:
+                    raise Exception('Unable to compute directory hash for input: {}'.format(input_name))
+                return hash0
+            else:
+                sha1=kbucket.computeFileSha1(val)
+                if not sha1:
+                    raise Exception('Unable to compute file sha-1 for input: {}'.format(input_name))
+                return sha1
         else:
-            raise Exception('Input file does not exist: {}'.format(input_name))
+            if os.path.exists(val):
+                if directory:
+                    if os.path.isdir(val):
+                        hash0=kbucket.computeDirHash(val)
+                        if not hash0:
+                            raise Exception('Unable to compute hash for directory input: {} ({})'.format(input_name,val))
+                        return hash0
+                    else:
+                        raise Exception('Input is not a directory: {}'.format(input_name))
+                else:
+                    if os.path.isfile(val):
+                        sha1=kbucket.computeFileSha1(val)
+                        if not sha1:
+                            raise Exception('Unable to compute sha-1 of input: {} ({})'.format(input_name,val))        
+                        return sha1
+                    else:
+                        raise Exception('Input is not a file: {}'.format(input_name))
+            else:
+                raise Exception('Input file does not exist: '+val)    
     else:
         if hasattr(val,'signature'):
             return getattr(val,'signature')
@@ -45,7 +74,7 @@ def compute_processor_job_output_signature(self,output_name):
         ))
         job_inputs.append(dict(
             name=name0,
-            signature=compute_job_input_signature(val0,input_name=name0),
+            signature=compute_job_input_signature(val0,input_name=name0,directory=input0.directory),
             ext=get_file_extension(val0)
         ))
     processor_outputs=[]
@@ -187,9 +216,12 @@ def execute(proc, _cache=True, _force_run=False, **kwargs):
         name0=input0.name
         if hasattr(X,name0):
             val0=getattr(X,name0)
-            val1=kbucket.realizeFile(val0)
-            if not val1:
-                raise Exception('Unable to realize input file {}: {}'.format(name0,val0))
+            if input0.directory:
+                val1=val0
+            else:
+                val1=kbucket.realizeFile(val0)
+                if not val1:
+                    raise Exception('Unable to realize input file {}: {}'.format(name0,val0))
             setattr(X,name0,val1)
         
     temporary_output_files=set()

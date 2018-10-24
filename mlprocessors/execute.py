@@ -136,6 +136,7 @@ class ProcessorExecuteOutput():
 
 def execute(proc, _cache=True, _force_run=False, **kwargs):
     # Execute a processor
+    print ('EXECUTING::::::::::::::::::::::::::::: '+proc.NAME)
     X=proc() # instance
     ret=ProcessorExecuteOutput() # We will return this object
     for input0 in proc.INPUTS:
@@ -169,9 +170,14 @@ def execute(proc, _cache=True, _force_run=False, **kwargs):
             output_signatures[name0]=signature0
             output_sha1,output_collection=pairio.get(signature0,return_collection=True)
             if output_sha1 is not None:
-                print('Found output "{}" in cache collection: {}'.format(name0,output_collection))
+                print ('Found output "{}" in cache collection: {}'.format(name0,output_collection))
                 cache_collections.add(output_collection)
                 output_sha1s[name0]=output_sha1
+
+                # Do the following because if we have it locally,
+                # we want to make sure it also gets propagated remotely
+                # and vice versa
+                pairio.set(signature0,output_sha1)
             else:
                 outputs_all_in_pairio=False
         output_files_all_found=False
@@ -184,17 +190,16 @@ def execute(proc, _cache=True, _force_run=False, **kwargs):
                     name0=output0.name
                     ext0=_get_output_ext(out0)
                     sha1=output_sha1s[name0]
+                    output_files[name0]='sha1://'+sha1+'/'+name0+ext0
                     fname=kbucket.findFile(sha1=sha1)
-                    if fname:
-                        output_files[name0]='sha1://'+sha1+'/'+name0+ext0
-                    else:
+                    if not fname:
                         output_files_all_found=False
         if outputs_all_in_pairio and (not output_files_all_found):
-            print('Found job in cache, but not all output files exist.')
+            print ('Found job in cache, but not all output files exist.')
 
         if output_files_all_found:
             if not _force_run:
-                print('Using outputs from cache:',','.join(list(cache_collections)))
+                print ('Using outputs from cache:',','.join(list(cache_collections)))
                 for output0 in proc.OUTPUTS:
                     name0=output0.name
                     fname1=output_files[name0]
@@ -210,7 +215,7 @@ def execute(proc, _cache=True, _force_run=False, **kwargs):
                         ret.outputs[name0]=fname1
                 return ret
             else:
-                print('Found outputs in cache, but forcing run...')
+                print ('Found outputs in cache, but forcing run...')
 
     for input0 in proc.INPUTS:
         name0=input0.name

@@ -136,7 +136,7 @@ class ProcessorExecuteOutput():
 
 def execute(proc, _cache=True, _force_run=False, **kwargs):
     # Execute a processor
-    print ('EXECUTING::::::::::::::::::::::::::::: '+proc.NAME)
+    print ('::::::::::::::::::::::::::::: '+proc.NAME)
     X=proc() # instance
     ret=ProcessorExecuteOutput() # We will return this object
     for input0 in proc.INPUTS:
@@ -240,9 +240,11 @@ def execute(proc, _cache=True, _force_run=False, **kwargs):
             temporary_output_files.add(tmp_fname)
             setattr(X,name0,tmp_fname)
     try:
+        print ('EXECUTING::::::::::::::::::::::::::::: '+proc.NAME)
         X.run()
     except:
         # clean up temporary output files
+        print ('Problem executing {}. Cleaning up files.'.format(proc.NAME))
         for fname in temporary_output_files:
             if os.path.exists(fname):
                 os.remove(fname)

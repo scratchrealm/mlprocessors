@@ -125,7 +125,8 @@ def compute_processor_job_output_signature(self,output_name):
     return sha1(signature_string)
 
 def create_temporary_file(fname):
-    tmp=tempfile.gettempdir()+'/mlprocessors'
+    tempdir=os.environ.get('KBUCKET_CACHE_DIR',tempfile.gettempdir())
+    tmp=tempdir+'/mlprocessors'
     if not os.path.exists(tmp):
         os.mkdir(tmp)
     return tmp+'/'+fname
